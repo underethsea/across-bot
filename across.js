@@ -12,16 +12,17 @@ const client = new Discord.Client({
 
 const { ABI } = require("./abi.js");
 
-let ethereumEndpoint =
-  "https://mainnet.infura.io/v3/" + process.env.ETHEREUM_KEY;
-ethereumEndpoint = "https://eth-mainnet.alchemyapi.io/v2/" + process.env.ETHEREUM_ALCHEMY_KEY
+// let ethereumEndpoint =
+//   "https://mainnet.infura.io/v3/" + process.env.ETHEREUM_KEY;
+let ethereumEndpoint = "https://eth-mainnet.alchemyapi.io/v2/" + process.env.ETHEREUM_ALCHEMY_KEY
 let arbitrumEndpoint = "https://arb1.arbitrum.io/rpc";
 arbitrumEndpoint = "https://arb-mainnet.g.alchemy.com/v2/" + process.env.ARBITRUM_ALCHEMY_KEY
 const optimismEndpoint = "https://mainnet.optimism.io";
 const bobaEndpoint = "https://lightning-replica.boba.network";
 
 const bridgePoolInterface = new ethers.utils.Interface(ABI.BRIDGEPOOL);
-const botTestChannelId = "932504732818362378";
+// const botTestChannelId = "932504732818362378";
+const botTestChannelId = "958093554809438249"
 const ethereumProvider = new ethers.providers.JsonRpcProvider(ethereumEndpoint);
 const arbitrumProvider = new ethers.providers.JsonRpcProvider(arbitrumEndpoint);
 const optimismProvider = new ethers.providers.JsonRpcProvider(optimismEndpoint);
@@ -371,6 +372,37 @@ async function botGo() {
   ethereumProvider.on(relayFilters.WETH, (relayEvent) => {
     console.log(relayEvent);
     let embed = processRelay(relayEvent,BRIDGEPOOL.WETH);
+    const testingChannel = client.channels.cache.get(botTestChannelId);
+    testingChannel.send({ embeds: [embed] });
+  });
+  ethereumProvider.on(relayFilters.USDC, (relayEvent) => {
+    console.log(relayEvent);
+    let embed = processRelay(relayEvent,BRIDGEPOOL.USDC);
+    const testingChannel = client.channels.cache.get(botTestChannelId);
+    testingChannel.send({ embeds: [embed] });
+  });
+  ethereumProvider.on(relayFilters.BADGER, (relayEvent) => {
+    console.log(relayEvent);
+    let embed = processRelay(relayEvent,BRIDGEPOOL.BADGER);
+    const testingChannel = client.channels.cache.get(botTestChannelId);
+    testingChannel.send({ embeds: [embed] });
+  });
+  ethereumProvider.on(relayFilters.UMA, (relayEvent) => {
+    console.log(relayEvent);
+    let embed = processRelay(relayEvent,BRIDGEPOOL.UMA);
+    const testingChannel = client.channels.cache.get(botTestChannelId);
+    testingChannel.send({ embeds: [embed] });
+  });
+  ethereumProvider.on(relayFilters.WBTC, (relayEvent) => {
+    console.log(relayEvent);
+    let embed = processRelay(relayEvent,BRIDGEPOOL.WBTC);
+    const testingChannel = client.channels.cache.get(botTestChannelId);
+    testingChannel.send({ embeds: [embed] });
+  });
+
+  ethereumProvider.on(relayFilters.DAI, (relayEvent) => {
+    console.log(relayEvent);
+    let embed = processRelay(relayEvent,BRIDGEPOOL.DAI);
     const testingChannel = client.channels.cache.get(botTestChannelId);
     testingChannel.send({ embeds: [embed] });
   });
