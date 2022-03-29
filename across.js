@@ -10,8 +10,16 @@ const client = new Discord.Client({
   intents: ["GUILDS", "GUILD_MESSAGES", "DIRECT_MESSAGES"],
 });
 
+const T = new Twit({
+  consumer_key: process.env.CONSUMER_KEY,
+  consumer_secret: process.env.CONSUMER_SECRET,
+  access_token: process.env.ACCESS_TOKEN,
+  access_token_secret: process.env.ACCESS_TOKEN_SECRET,
+  timeout_ms: 60 * 1000
+})
+
 const { ABI } = require("./abi.js");
-const { BRIDGEPOOL, DEPOSITBOX} = require("./constants.js")
+const { BRIDGEPOOL, DEPOSITBOX } = require("./constants.js")
 const { RELAYFILTERS, DEPOSITFILTERS } = require("./filters.js")
 const { PROVIDER } = require("./providers.js")
 
@@ -60,47 +68,50 @@ async function relayEmbed(relayData, poolObject) {
   // let pool = findPool(relayData.l1Token);
   // symbol = poolObject.SYMBOL;
   let chain = chainInfo(relayData.chainId);
-  let relayTime =   parseFloat(relayData.priceRequestTime) - parseFloat(relayData.quoteTimestamp);
-  let relayTotalFeePercentage = parseFloat(ethers.utils.formatUnits(relayData.slowRelayFeePct,18)) + parseFloat(ethers.utils.formatUnits(relayData.instantRelayFeePct,18)) + parseFloat(ethers.utils.formatUnits(relayData.realizedLpFeePct,18))
+  let relayTime = parseFloat(relayData.priceRequestTime) - parseFloat(relayData.quoteTimestamp);
+  let relayTotalFeePercentage = parseFloat(ethers.utils.formatUnits(relayData.slowRelayFeePct, 18)) + parseFloat(ethers.utils.formatUnits(relayData.instantRelayFeePct, 18)) + parseFloat(ethers.utils.formatUnits(relayData.realizedLpFeePct, 18))
   let depositAmount = parseFloat(ethers.utils.formatUnits(relayData.amount, poolObject.DECIMALS))
-  let receivedAmount = depositAmount * (1-relayTotalFeePercentage)
+  let receivedAmount = depositAmount * (1 - relayTotalFeePercentage)
   // let relayFinalFee = relayData.finalFee / poolObject.DECIMALS;
+
+  const tweet = { status: `Funds received from ${chain} to Ethereum Mainnet in ${relayTime} \n\nAmount: ${receivedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} \n\nhttps://etherscan.io/tx/${relayData.transactionHash}` }
+
   const relayEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
     .setTitle(
       ":handshake:  RELAYED `" +
-        decimals(depositAmount) +
-        "` **" +
-        poolObject.SYMBOL +
-        "**"
+      decimals(depositAmount) +
+      "` **" +
+      poolObject.SYMBOL +
+      "**"
     )
     .setDescription(
       ":watch: `" +
-        relayTime +
-        "` seconds" +
-        // + "<t:" +
-        //     depositData.quoteTimestamp +
-        //     ":R>" +
-        "\nReceived `" + decimals(receivedAmount) + "` " + poolObject.SYMBOL + 
-        "\nFee `" +
-        decimals(relayTotalFeePercentage * 100) +
-        "%`" +
-        "\nDeposit `#" +
-        relayData.depositId +
-        "`"
+      relayTime +
+      "` seconds" +
+      // + "<t:" +
+      //     depositData.quoteTimestamp +
+      //     ":R>" +
+      "\nReceived `" + decimals(receivedAmount) + "` " + poolObject.SYMBOL +
+      "\nFee `" +
+      decimals(relayTotalFeePercentage * 100) +
+      "%`" +
+      "\nDeposit `#" +
+      relayData.depositId +
+      "`"
     )
     .setThumbnail(chain.chainLogo)
     .addField(
       "\u200B",
       "View on [" +
-        "Etherscan" +
-        "](" +
-        "https://etherscan.io/tx/" +
-        relayData.transactionHash +
-        ")"
+      "Etherscan" +
+      "](" +
+      "https://etherscan.io/tx/" +
+      relayData.transactionHash +
+      ")"
     );
 
-  return relayEmbed;
+  return { relayEmbed: relayEmbed, tweet: tweet };
 }
 const findPool = (tokenAddress) => {
   console.log("find pool", tokenAddress);
@@ -164,39 +175,46 @@ async function depositAlert(depositData) {
 
   let pool = findPool(depositData.l1Token);
   symbol = pool.SYMBOL;
+  let amount = decimals(
+    parseFloat(
+      ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
+    )
+  )
+
+  const tweet = { status: `Bridge initiated from ${chain} to Ethereum Mainnet. \n\nAmount: ${amount} \n\n${chain.explorerURL + depositData.transactionHash}` }
 
   const depositEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
     .setTitle(
       ":bank:  DEPOSITED `" +
-        decimals(
-          parseFloat(
-            ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
-          )
-        ) +
-        "` **" +
-        symbol +
-        "**"
+      decimals(
+        parseFloat(
+          ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
+        )
+      ) +
+      "` **" +
+      symbol +
+      "**"
     )
     .setDescription(
       ":alarm_clock: <t:" +
-        depositData.quoteTimestamp +
-        ":R>" +
-        "\nDeposit `#" +
-        depositData.depositId +
-        "`"
+      depositData.quoteTimestamp +
+      ":R>" +
+      "\nDeposit `#" +
+      depositData.depositId +
+      "`"
     )
     .setThumbnail(chain.chainLogo)
     .addField(
       "\u200B",
       "View on [" +
-        chain.explorerName +
-        "](" +
-        chain.explorerURL +
-        depositData.transactionHash +
-        ")"
+      chain.explorerName +
+      "](" +
+      chain.explorerURL +
+      depositData.transactionHash +
+      ")"
     );
-  return depositEmbed;
+  return {depositEmbed: depositEmbed, tweet: tweet};
 }
 
 async function processDeposit(depositEvent) {
@@ -235,6 +253,12 @@ async function processDeposit(depositEvent) {
   return embed;
 }
 
+async function sendTweet(tweet) {
+  T.post('statuses/update', tweet, function (err, data, response) {
+    console.log(data.text)
+  })
+}
+
 async function botGo() {
   client.once("ready", () => {
     console.log("Ready!");
@@ -242,27 +266,34 @@ async function botGo() {
 
   PROVIDER.OPTIMISM.on(DEPOSITFILTERS.OPTIMISM, (depositEvent) => {
     try {
-      processDeposit(depositEvent).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+      processDeposit(depositEvent).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.depositEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
+
   });
   PROVIDER.ARBITRUM.on(DEPOSITFILTERS.ARBITRUM, (depositEvent) => {
     try {
-      processDeposit(depositEvent).then(embed => {
+      processDeposit(depositEvent).then(result => {
         const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+        testingChannel.send({ embeds: [result.depositEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
   });
   PROVIDER.BOBA.on(DEPOSITFILTERS.BOBA, (depositEvent) => {
     try {
-      processDeposit(depositEvent).then(embed => {
+      processDeposit(depositEvent).then(result => {
         const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+        testingChannel.send({ embeds: [result.depositEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -271,9 +302,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.WETH, (relayEvent) => {
     console.log(relayEvent);
     try {
-      processRelay(relayEvent, BRIDGEPOOL.WETH).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+      processRelay(relayEvent, BRIDGEPOOL.WETH).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -281,9 +314,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.USDC, (relayEvent) => {
     try {
       console.log(relayEvent);
-      processRelay(relayEvent, BRIDGEPOOL.USDC).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+      processRelay(relayEvent, BRIDGEPOOL.USDC).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -291,9 +326,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.BADGER, (relayEvent) => {
     try {
       console.log(relayEvent);
-      processRelay(relayEvent, BRIDGEPOOL.BADGER).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+      processRelay(relayEvent, BRIDGEPOOL.BADGER).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -301,9 +338,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.UMA, (relayEvent) => {
     try {
       console.log(relayEvent);
-      processRelay(relayEvent, BRIDGEPOOL.UMA).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] });})
+      processRelay(relayEvent, BRIDGEPOOL.UMA).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -311,9 +350,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.WBTC, (relayEvent) => {
     try {
       console.log(relayEvent);
-      processRelay(relayEvent, BRIDGEPOOL.WBTC).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] })})
+      processRelay(relayEvent, BRIDGEPOOL.WBTC).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
@@ -322,9 +363,11 @@ async function botGo() {
   PROVIDER.ETHEREUM.on(RELAYFILTERS.DAI, (relayEvent) => {
     try {
       console.log(relayEvent);
-      processRelay(relayEvent, BRIDGEPOOL.DAI).then(embed => {
-      const testingChannel = client.channels.cache.get(botTestChannelId);
-      testingChannel.send({ embeds: [embed] })})
+      processRelay(relayEvent, BRIDGEPOOL.DAI).then(result => {
+        const testingChannel = client.channels.cache.get(botTestChannelId);
+        testingChannel.send({ embeds: [result.relayEmbed] });
+        sendTweet(result.tweet);
+      })
     } catch (error) {
       console.log(error);
     }
