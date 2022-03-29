@@ -4,6 +4,8 @@ const ethers = require("ethers");
 const fetch = require("cross-fetch");
 const Discord = require("discord.js");
 const { MessageEmbed } = require("discord.js");
+var Twit = require('twit')
+
 dotenv.config();
 const client = new Discord.Client({
   partials: ["CHANNEL"],
