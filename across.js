@@ -37,7 +37,7 @@ async function processRelay(relayEvent, poolObject) {
     relayState: decoded[2].relayState,
     slowRelayer: decoded[2].slowRelayer,
     relayId: decoded[2].relayId,
-    realizedLpFeePct: decoded[2].realizedLpFeePct.toString(),
+    realizedLpFeePct: decoded[2].realizedLpFeePct,
     priceRequestTime: decoded[2].priceRequestTime,
     proposerBond: decoded[2].proposerBond.toString(),
     finalFee: decoded[2].finalFee.toString(),
@@ -46,8 +46,8 @@ async function processRelay(relayEvent, poolObject) {
     l1Recipient: decoded.depositData.l1Recipient,
     l2Sender: decoded.depositData.l2Sender,
     amount: decoded.depositData.amount,
-    slowRelayFeePct: decoded.depositData.slowRelayFeePct.toString(),
-    instantRelayFeePct: decoded.depositData.instantRelayFeePct.toString(),
+    slowRelayFeePct: decoded.depositData.slowRelayFeePct,
+    instantRelayFeePct: decoded.depositData.instantRelayFeePct,
     quoteTimestamp: decoded.depositData.quoteTimestamp,
     transactionHash: relayEvent.transactionHash,
   };
@@ -60,19 +60,16 @@ async function relayEmbed(relayData, poolObject) {
   // let pool = findPool(relayData.l1Token);
   // symbol = poolObject.SYMBOL;
   let chain = chainInfo(relayData.chainId);
-  let relayTime =
-    parseFloat(relayData.priceRequestTime) -
-    parseFloat(relayData.quoteTimestamp);
-  let relayFee = relayData.finalFee / poolObject.DECIMALS;
+  let relayTime =   parseFloat(relayData.priceRequestTime) - parseFloat(relayData.quoteTimestamp);
+  let relayTotalFeePercentage = parseFloat(ethers.utils.formatUnits(relayData.slowRelayFeePct,18)) + parseFloat(ethers.utils.formatUnits(relayData.instantRelayFeePct,18)) + parseFloat(ethers.utils.formatUnits(relayData.realizedLpFeePct,18))
+  let depositAmount = parseFloat(ethers.utils.formatUnits(relayData.amount, poolObject.DECIMALS))
+  let receivedAmount = depositAmount * (1-relayTotalFeePercentage)
+  // let relayFinalFee = relayData.finalFee / poolObject.DECIMALS;
   const relayEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
     .setTitle(
       ":handshake:  RELAYED `" +
-        decimals(
-          parseFloat(
-            ethers.utils.formatUnits(relayData.amount, poolObject.DECIMALS)
-          )
-        ) +
+        decimals(depositAmount) +
         "` **" +
         poolObject.SYMBOL +
         "**"
@@ -84,9 +81,10 @@ async function relayEmbed(relayData, poolObject) {
         // + "<t:" +
         //     depositData.quoteTimestamp +
         //     ":R>" +
+        "\nReceived `" + decimals(receivedAmount) + "` " + poolObject.SYMBOL + 
         "\nFee `" +
-        decimals(relayFee) +
-        "`" +
+        decimals(relayTotalFeePercentage * 100) +
+        "%`" +
         "\nDeposit `#" +
         relayData.depositId +
         "`"
@@ -95,9 +93,9 @@ async function relayEmbed(relayData, poolObject) {
     .addField(
       "\u200B",
       "View on [" +
-        chain.explorerName +
+        "Etherscan" +
         "](" +
-        chain.explorerURL +
+        "https://etherscan.io/tx/" +
         relayData.transactionHash +
         ")"
     );
