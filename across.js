@@ -1,25 +1,31 @@
+
 const { Client, Intents } = require("discord.js");
 const dotenv = require("dotenv");
 const ethers = require("ethers");
 const fetch = require("cross-fetch");
 const Discord = require("discord.js");
 const { MessageEmbed } = require("discord.js");
+const { HopReceived } = require("./hop.js")
+const { GeckoFetch } = require("./geckoFetch.js")
+
 var Twit = require("twit");
 
 dotenv.config();
-
+var twitterOn = false;
 const client = new Discord.Client({
   partials: ["CHANNEL"],
   intents: ["GUILDS", "GUILD_MESSAGES", "DIRECT_MESSAGES"],
 });
 
+const T = {}
+if(twitterOn) {
 const T = new Twit({
   consumer_key: process.env.CONSUMER_KEY,
   consumer_secret: process.env.CONSUMER_SECRET,
   access_token: process.env.ACCESS_TOKEN,
   access_token_secret: process.env.ACCESS_TOKEN_SECRET,
   timeout_ms: 60 * 1000,
-});
+});}
 
 const { ABI } = require("./abi.js");
 const { BRIDGEPOOL, DEPOSITBOX } = require("./constants.js");
@@ -27,7 +33,7 @@ const { RELAYFILTERS, DEPOSITFILTERS } = require("./filters.js");
 const { PROVIDER } = require("./providers.js");
 
 // const botTestChannelId = "932504732818362378";
-const botTestChannelId = "958093554809438249";
+ const botTestChannelId = "958093554809438249";
 
 // todo add transaction receipt for gas cost
 // const getReceipt = (transactionHash,chainId) => {
@@ -89,6 +95,15 @@ async function relayEmbed(relayData, poolObject) {
     )} \n\nhttps://etherscan.io/tx/${relayData.transactionHash}`,
   };
 
+  let hopSampleReceived = await HopReceived(poolObject.HOPID,relayData.amount.toString(),relayData.chainId,1)
+  let hopFeePercent = 0
+  let hopFeeString = ""
+  if(hopSampleReceived !== null) {
+    hopSampleReceived = ethers.utils.formatUnits(hopSampleReceived,poolObject.DECIMALS)
+    let hopFeePercent = ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100
+    hopFeeString = "\nAvoided Hop Fee `" + decimals(hopFeePercent) + "%`"
+  }
+
   const relayEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
     .setTitle(
@@ -109,9 +124,10 @@ async function relayEmbed(relayData, poolObject) {
         decimals(receivedAmount) +
         "` " +
         poolObject.SYMBOL +
-        "\nFee `" +
+        "\nPaid Across Fee `" +
         decimals(relayTotalFeePercentage * 100) +
         "%`" +
+        hopFeeString +
         "\nDeposit `#" +
         relayData.depositId +
         "`"
@@ -272,9 +288,10 @@ async function processDeposit(depositEvent) {
 }
 
 async function sendTweet(tweet) {
+  if(twitterOn) {
   T.post("statuses/update", tweet, function (err, data, response) {
     console.log(data.text);
-  });
+  });}
 }
 
 async function botGo() {
