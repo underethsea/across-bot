@@ -28,12 +28,13 @@ return estimatedReceived
 
 }
 // testing....
-async function go (){
-let amount = '60000000000'
+// async function go (){
+// let amount = '60000000000'
 
- let b = await HopReceived('USDC',amount,42161,1,6)
- console.log("amount ",parseFloat(amount) / 1e6," received ",ethers.utils.formatUnits(b,6))
-}
-go()
+//  let b = await HopReceived('USDC',amount,42161,1,6)
+//  console.log("amount ",parseFloat(amount) / 1e6," received ",ethers.utils.formatUnits(b,6))
+// }
+// go()
+
 module.exports = {HopReceived}
 
