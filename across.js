@@ -7,6 +7,7 @@ const Discord = require("discord.js");
 const { MessageEmbed } = require("discord.js");
 const { HopReceived } = require("./hop.js")
 const { GeckoFetch } = require("./geckoFetch.js")
+// const { SynapseReceived } = require("./synapse.mjs")
 
 var Twit = require("twit");
 
@@ -101,8 +102,17 @@ async function relayEmbed(relayData, poolObject) {
   if(hopSampleReceived !== null) {
     hopSampleReceived = ethers.utils.formatUnits(hopSampleReceived,poolObject.DECIMALS)
     let hopFeePercent = ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100
-    hopFeeString = "\nAvoided Hop Fee `" + decimals(hopFeePercent) + "%`"
+    hopFeeString = "\nHop Fee Comparison `" + decimals(hopFeePercent) + "%`"
   }
+
+  // let synapseSampleReceived = await SynapseReceived(poolObject.HOPID,relayData.amount.toString(),relayData.chainId,1,poolObject.DECIMALS)
+  // let synapseFeePercent = 0
+  // let synapseFeeString = ""
+  // if(synapseSampleReceived !== null) {
+  //   synapseSampleReceived = ethers.utils.formatUnits(synapseSampleReceived,poolObject.DECIMALS)
+  //   let synapseFeePercent = ((depositAmount - synapseSampleReceived) / synapseSampleReceived) * 100
+  //   synapseFeeString = "\nSynapse Fee Comparison `" + decimals(synapseFeePercent) + "%`"
+  // }
 
   const relayEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
@@ -128,6 +138,7 @@ async function relayEmbed(relayData, poolObject) {
         decimals(relayTotalFeePercentage * 100) +
         "%`" +
         hopFeeString +
+        // synapseFeeString +
         "\nDeposit `#" +
         relayData.depositId +
         "`"

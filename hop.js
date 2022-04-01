@@ -24,7 +24,7 @@ const {estimatedReceived} = await bridge.getSendData(amount, hopChain(fromChain)
 return estimatedReceived
 
   }else {return null}
-}catch(error){console.log(error)}
+}catch(error){return null;console.log(error)}
 
 }
 // testing....
