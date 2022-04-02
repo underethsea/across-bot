@@ -1,6 +1,6 @@
-const dotenv = require("dotenv");
+import dotenv from "dotenv";
 dotenv.config();
-const ethers = require("ethers")
+import ethers from "ethers"
 
 // let ethereumEndpoint =
 //   "https://mainnet.infura.io/v3/" + process.env.ETHEREUM_KEY;
@@ -19,4 +19,4 @@ const PROVIDER = {
   BOBA: new ethers.providers.JsonRpcProvider(bobaEndpoint),
 };
 
-module.exports = { PROVIDER };
+export { PROVIDER };

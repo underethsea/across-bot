@@ -1,5 +1,5 @@
-const { BRIDGEPOOL, DEPOSITBOX} = require("./constants.js")
-const ethers = require("ethers")
+import { BRIDGEPOOL, DEPOSITBOX} from "./constants.js"
+import ethers from "ethers"
 
 const relayTopics =
 "0xa4ca36d112520cced74325c72711f376fe4015665829d879ba21590cb8130be0";
@@ -58,5 +58,4 @@ const DEPOSITFILTERS = {
     ]}
 }
 
-
-module.exports = { RELAYFILTERS, DEPOSITFILTERS };
+export { RELAYFILTERS, DEPOSITFILTERS };

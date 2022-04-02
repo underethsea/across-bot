@@ -1,5 +1,5 @@
 
-const fetch = require('node-fetch')
+import fetch from 'node-fetch'
 const GeckoPrice = async (tokenID) => {
     const url = "https://api.coingecko.com/api/v3/simple/price?ids=" + tokenID + "&vs_currencies=usd";
       
@@ -15,4 +15,4 @@ const GeckoPrice = async (tokenID) => {
           console.log(error);
       }
   }
-module.exports = {GeckoPrice}
+export {GeckoPrice}

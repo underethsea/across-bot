@@ -1,17 +1,23 @@
 
-const { Client, Intents } = require("discord.js");
-const dotenv = require("dotenv");
-const ethers = require("ethers");
-const fetch = require("cross-fetch");
-const Discord = require("discord.js");
-const { MessageEmbed } = require("discord.js");
-const { HopReceived } = require("./hop.js")
-const { GeckoFetch } = require("./geckoFetch.js")
-// const { SynapseReceived } = require("./synapse.mjs")
+import { Client, Intents } from "discord.js";
+import 'dotenv/config'
+import ethers from "ethers";
+import fetch from "cross-fetch";
+import Discord from "discord.js";
+import { MessageEmbed } from "discord.js";
 
-var Twit = require("twit");
+import { GeckoPrice } from "./geckoFetch.js"
+import { SynapseReceived } from "./synapse.mjs"
+import { HopReceived } from "./hop.js"
 
-dotenv.config();
+
+import { ABI } from "./abi.js"
+import { BRIDGEPOOL} from "./constants.js"
+import { RELAYFILTERS, DEPOSITFILTERS } from "./filters.js"
+import { PROVIDER } from "./providers.js"
+
+import Twit from "twit"
+
 var twitterOn = false;
 const client = new Discord.Client({
   partials: ["CHANNEL"],
@@ -28,13 +34,8 @@ const T = new Twit({
   timeout_ms: 60 * 1000,
 });}
 
-const { ABI } = require("./abi.js");
-const { BRIDGEPOOL, DEPOSITBOX } = require("./constants.js");
-const { RELAYFILTERS, DEPOSITFILTERS } = require("./filters.js");
-const { PROVIDER } = require("./providers.js");
-
-// const botTestChannelId = "932504732818362378";
- const botTestChannelId = "958093554809438249";
+const botTestChannelId = "932504732818362378"; // private discord
+// const botTestChannelId = "958093554809438249"; // across bot testing
 
 // todo add transaction receipt for gas cost
 // const getReceipt = (transactionHash,chainId) => {
@@ -96,23 +97,6 @@ async function relayEmbed(relayData, poolObject) {
     )} \n\nhttps://etherscan.io/tx/${relayData.transactionHash}`,
   };
 
-  let hopSampleReceived = await HopReceived(poolObject.HOPID,relayData.amount.toString(),relayData.chainId,1)
-  let hopFeePercent = 0
-  let hopFeeString = ""
-  if(hopSampleReceived !== null) {
-    hopSampleReceived = ethers.utils.formatUnits(hopSampleReceived,poolObject.DECIMALS)
-    let hopFeePercent = ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100
-    hopFeeString = "\nHop Fee Comparison `" + decimals(hopFeePercent) + "%`"
-  }
-
-  // let synapseSampleReceived = await SynapseReceived(poolObject.HOPID,relayData.amount.toString(),relayData.chainId,1,poolObject.DECIMALS)
-  // let synapseFeePercent = 0
-  // let synapseFeeString = ""
-  // if(synapseSampleReceived !== null) {
-  //   synapseSampleReceived = ethers.utils.formatUnits(synapseSampleReceived,poolObject.DECIMALS)
-  //   let synapseFeePercent = ((depositAmount - synapseSampleReceived) / synapseSampleReceived) * 100
-  //   synapseFeeString = "\nSynapse Fee Comparison `" + decimals(synapseFeePercent) + "%`"
-  // }
 
   const relayEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
@@ -137,8 +121,6 @@ async function relayEmbed(relayData, poolObject) {
         "\nPaid Across Fee `" +
         decimals(relayTotalFeePercentage * 100) +
         "%`" +
-        hopFeeString +
-        // synapseFeeString +
         "\nDeposit `#" +
         relayData.depositId +
         "`"
@@ -217,7 +199,7 @@ async function depositAlert(depositData) {
   let chain = chainInfo(depositData.chainId);
 
   let pool = findPool(depositData.l1Token);
-  symbol = pool.SYMBOL;
+  let symbol = pool.SYMBOL;
   let amount = decimals(
     parseFloat(ethers.utils.formatUnits(depositData.amount, pool.DECIMALS))
   );
@@ -227,6 +209,26 @@ async function depositAlert(depositData) {
       chain.explorerURL + depositData.transactionHash
     }`,
   };
+
+  let depositAmount = parseFloat(
+    ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
+  );
+  let hopSampleReceived = await HopReceived(pool.HOPID,depositData.amount.toString(),depositData.chainId,1)
+  let hopFeeString = ""
+  if(hopSampleReceived !== null) {
+    hopSampleReceived = ethers.utils.formatUnits(hopSampleReceived,pool.DECIMALS)
+    let hopFeePercent = ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100
+    hopFeeString = "\nHop Fee Estimate `" + decimals(hopFeePercent) + "%`"
+  }
+
+  let synapseSampleReceived = await SynapseReceived(pool.HOPID,ethers.utils.formatUnits(depositData.amount,pool.DECIMALS),depositData.chainId,1,pool.DECIMALS)
+  let synapseFeeString = ""
+  if(synapseSampleReceived !== null) {
+    synapseSampleReceived = ethers.utils.formatUnits(synapseSampleReceived,pool.DECIMALS)
+    let synapseFeePercent = ((depositAmount - synapseSampleReceived) / synapseSampleReceived) * 100
+    synapseFeeString = "\nSynapse Fee Estimate `" + decimals(synapseFeePercent) + "%`"
+  }
+
 
   const depositEmbed = new MessageEmbed()
     .setColor("#6CF9D8")
@@ -247,8 +249,8 @@ async function depositAlert(depositData) {
         ":R>" +
         "\nDeposit `#" +
         depositData.depositId +
-        "`"
-    )
+        "`" +
+        hopFeeString + synapseFeeString)
     .setThumbnail(chain.chainLogo)
     .addField(
       "\u200B",

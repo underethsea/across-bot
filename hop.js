@@ -1,8 +1,9 @@
 
-const { Hop, Chain } = require('@hop-protocol/sdk')
-const { Wallet, providers } = require('ethers')
-const { PROVIDER } = require("./providers.js")
-const ethers = require('ethers')
+import { Hop, Chain } from '@hop-protocol/sdk'
+import { Wallet, providers } from 'ethers'
+import { PROVIDER } from "./providers.js"
+import ethers from 'ethers'
+
 const hop = new Hop('mainnet', PROVIDER.ETHEREUM)
 function hopChain(chainId) {
   let chain = parseInt(chainId)
@@ -36,5 +37,5 @@ return estimatedReceived
 // }
 // go()
 
-module.exports = {HopReceived}
+export {HopReceived}
 

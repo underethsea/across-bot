@@ -4,7 +4,7 @@ import { ethers } from "ethers";
 import { PROVIDER } from "./providers.js";
 
 const synapseAsset = (symbol) => {
-  if (symbol === "WETH") {
+  if (symbol === "WETH" || symbol === "ETH") {
     return Tokens.ETH;
   }
   if (symbol === "USDC") {
@@ -16,6 +16,7 @@ const synapseAsset = (symbol) => {
 };
 // Initialize Bridge
 const synapseBridge = (chainId) => {
+  chainId = parseInt(chainId)
   if (chainId === 10) {
     const OPTIMISM_NETWORK = Networks.OPTIMISM;
 
@@ -56,18 +57,25 @@ const synapseBridge = (chainId) => {
 
 async function SynapseReceived(asset, amount, fromChain, toChain, decimals) {
     try{
+      console.log("synapse estimate called asset ",asset," amount ",amount," fromChain ",fromChain, " to chain ",toChain, " decimals ",decimals )
   // get estimated output
   const SYNAPSE_BRIDGE = synapseBridge(fromChain);
-  let INPUT_AMOUNT = ethers.utils.parseUnits(amount.toString(), decimals);
+  let INPUT_AMOUNT = ethers.utils.parseUnits(amount.toString(),decimals);
+  console.log()
   const { amountToReceive } = await SYNAPSE_BRIDGE.estimateBridgeTokenOutput({
     tokenFrom: synapseAsset(asset), // token to send from the source chain, in this case USDT on Avalanche
     chainIdTo: toChain, // Chain ID of the destination chain, in this case BSC
     tokenTo: synapseAsset(asset), // Token to be received on the destination chain, in this case USDC
     amountFrom: INPUT_AMOUNT,
   });
-  return ethers.utils.formatUnits(amountToReceive, 6);
+  console.log(amountToReceive.toString())
+  return amountToReceive
 }catch(error){console.log(error);return null}
 }
-
+export {SynapseReceived}
 // example
-SynapseReceived("USDC", 10000, 42161, 1, 6);
+// SynapseReceived("ETH", "5.1312", "42161", 1, 18);
+// const go = async () => {SynapseReceived("USDC", "10000", "42161", 1, 6);}
+// go()
+
+// ETH  amount  540000000000000000  fromChain  42161  to chain  1  decimals  18
