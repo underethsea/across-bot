@@ -1,38 +1,42 @@
-
 import { Client, Intents } from "discord.js";
-import 'dotenv/config'
+import "dotenv/config";
 import ethers from "ethers";
 import fetch from "cross-fetch";
 import Discord from "discord.js";
 import { MessageEmbed } from "discord.js";
 
-import { GeckoPrice } from "./geckoFetch.js"
-import { SynapseReceived } from "./synapse.mjs"
-import { HopReceived } from "./hop.js"
+import { GeckoPrice } from "./geckoFetch.js";
+import { SynapseReceived } from "./synapse.mjs";
+import { HopReceived } from "./hop.js";
 
+import { ABI } from "./abi.js";
+import { BRIDGEPOOL } from "./constants.js";
+import { RELAYFILTERS, DEPOSITFILTERS } from "./filters.js";
+import { PROVIDER } from "./providers.js";
 
-import { ABI } from "./abi.js"
-import { BRIDGEPOOL} from "./constants.js"
-import { RELAYFILTERS, DEPOSITFILTERS } from "./filters.js"
-import { PROVIDER } from "./providers.js"
+import Twit from "twit";
 
-import Twit from "twit"
-
+// toggle Twitter alerts on and off
 var twitterOn = false;
+
+// threshold in USD for alerts
+const alertThreshold = 10000;
+
 const client = new Discord.Client({
   partials: ["CHANNEL"],
   intents: ["GUILDS", "GUILD_MESSAGES", "DIRECT_MESSAGES"],
 });
 
-const T = {}
-if(twitterOn) {
-const T = new Twit({
-  consumer_key: process.env.CONSUMER_KEY,
-  consumer_secret: process.env.CONSUMER_SECRET,
-  access_token: process.env.ACCESS_TOKEN,
-  access_token_secret: process.env.ACCESS_TOKEN_SECRET,
-  timeout_ms: 60 * 1000,
-});}
+const T = {};
+if (twitterOn) {
+  const T = new Twit({
+    consumer_key: process.env.CONSUMER_KEY,
+    consumer_secret: process.env.CONSUMER_SECRET,
+    access_token: process.env.ACCESS_TOKEN,
+    access_token_secret: process.env.ACCESS_TOKEN_SECRET,
+    timeout_ms: 60 * 1000,
+  });
+}
 
 const botTestChannelId = "932504732818362378"; // private discord
 // const botTestChannelId = "958093554809438249"; // across bot testing
@@ -90,53 +94,60 @@ async function relayEmbed(relayData, poolObject) {
   let receivedAmount = depositAmount * (1 - relayTotalFeePercentage);
   // let relayFinalFee = relayData.finalFee / poolObject.DECIMALS;
 
-  const tweet = {
-    status: `Funds received from ${chain} to Ethereum Mainnet in ${relayTime} \n\nAmount: ${receivedAmount.toLocaleString(
-      undefined,
-      { maximumFractionDigits: 2 }
-    )} \n\nhttps://etherscan.io/tx/${relayData.transactionHash}`,
-  };
+  let geckoPrice = await GeckoPrice(poolObject.GECKOID);
+  let depositUsdValue = depositAmount * geckoPrice;
 
+  if (depositUsdValue > alertThreshold) {
+    const tweet = {
+      status: `Funds received from ${chain} to Ethereum Mainnet in ${relayTime} \n\nAmount: ${receivedAmount.toLocaleString(
+        undefined,
+        { maximumFractionDigits: 2 }
+      )} \n\nhttps://etherscan.io/tx/${relayData.transactionHash}`,
+    };
 
-  const relayEmbed = new MessageEmbed()
-    .setColor("#6CF9D8")
-    .setTitle(
-      ":handshake:  RELAYED `" +
-        decimals(depositAmount) +
-        "` **" +
-        poolObject.SYMBOL +
-        "**"
-    )
-    .setDescription(
-      ":watch: `" +
-        relayTime +
-        "` seconds" +
-        // + "<t:" +
-        //     depositData.quoteTimestamp +
-        //     ":R>" +
-        "\nReceived `" +
-        decimals(receivedAmount) +
-        "` " +
-        poolObject.SYMBOL +
-        "\nPaid Across Fee `" +
-        decimals(relayTotalFeePercentage * 100) +
-        "%`" +
-        "\nDeposit `#" +
-        relayData.depositId +
-        "`"
-    )
-    .setThumbnail(chain.chainLogo)
-    .addField(
-      "\u200B",
-      "View on [" +
-        "Etherscan" +
-        "](" +
-        "https://etherscan.io/tx/" +
-        relayData.transactionHash +
-        ")"
-    );
+    const relayEmbed = new MessageEmbed()
+      .setColor("#6CF9D8")
+      .setTitle(
+        ":handshake:  RELAYED `" +
+          decimals(depositAmount) +
+          "` **" +
+          poolObject.SYMBOL +
+          "**"
+      )
+      .setDescription(
+        ":watch: `" +
+          relayTime +
+          "` seconds" +
+          // + "<t:" +
+          //     depositData.quoteTimestamp +
+          //     ":R>" +
+          "\nReceived `" +
+          decimals(receivedAmount) +
+          "` " +
+          poolObject.SYMBOL +
+          "\nPaid Across Fee `" +
+          decimals(relayTotalFeePercentage * 100) +
+          "%`" +
+          "\nDeposit `#" +
+          relayData.depositId +
+          "`"
+      )
+      .setThumbnail(chain.chainLogo)
+      .addField(
+        "\u200B",
+        "View on [" +
+          "Etherscan" +
+          "](" +
+          "https://etherscan.io/tx/" +
+          relayData.transactionHash +
+          ")"
+      );
 
-  return { relayEmbed: relayEmbed, tweet: tweet };
+    return { relayEmbed: relayEmbed, tweet: tweet };
+  } else {
+    console.log("relay did not meet threshold, amt ",depositUsdValue);
+    return null;
+  }
 }
 const findPool = (tokenAddress) => {
   console.log("find pool", tokenAddress);
@@ -200,68 +211,100 @@ async function depositAlert(depositData) {
 
   let pool = findPool(depositData.l1Token);
   let symbol = pool.SYMBOL;
-  let amount = decimals(
-    parseFloat(ethers.utils.formatUnits(depositData.amount, pool.DECIMALS))
-  );
 
-  const tweet = {
-    status: `Bridge initiated from ${chain} to Ethereum Mainnet. \n\nAmount: ${amount} \n\n${
-      chain.explorerURL + depositData.transactionHash
-    }`,
-  };
-
-  let depositAmount = parseFloat(
+  let amount = parseFloat(
     ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
   );
-  let hopSampleReceived = await HopReceived(pool.HOPID,depositData.amount.toString(),depositData.chainId,1)
-  let hopFeeString = ""
-  if(hopSampleReceived !== null) {
-    hopSampleReceived = ethers.utils.formatUnits(hopSampleReceived,pool.DECIMALS)
-    let hopFeePercent = ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100
-    hopFeeString = "\nHop Fee Estimate `" + decimals(hopFeePercent) + "%`"
-  }
+  let geckoPrice = await GeckoPrice(pool.GECKOID);
+  let depositUsdValue = amount * geckoPrice;
 
-  let synapseSampleReceived = await SynapseReceived(pool.HOPID,ethers.utils.formatUnits(depositData.amount,pool.DECIMALS),depositData.chainId,1,pool.DECIMALS)
-  let synapseFeeString = ""
-  if(synapseSampleReceived !== null) {
-    synapseSampleReceived = ethers.utils.formatUnits(synapseSampleReceived,pool.DECIMALS)
-    let synapseFeePercent = ((depositAmount - synapseSampleReceived) / synapseSampleReceived) * 100
-    synapseFeeString = "\nSynapse Fee Estimate `" + decimals(synapseFeePercent) + "%`"
-  }
+  if (depositUsdValue > alertThreshold) {
+    const tweet = {
+      status: `Bridge initiated from ${chain} to Ethereum Mainnet. \n\nAmount: ${decimals(
+        amount
+      )} \n\n${chain.explorerURL + depositData.transactionHash}`,
+    };
 
-
-  const depositEmbed = new MessageEmbed()
-    .setColor("#6CF9D8")
-    .setTitle(
-      ":bank:  DEPOSITED `" +
-        decimals(
-          parseFloat(
-            ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
-          )
-        ) +
-        "` **" +
-        symbol +
-        "**"
-    )
-    .setDescription(
-      ":alarm_clock: <t:" +
-        depositData.quoteTimestamp +
-        ":R>" +
-        "\nDeposit `#" +
-        depositData.depositId +
-        "`" +
-        hopFeeString + synapseFeeString)
-    .setThumbnail(chain.chainLogo)
-    .addField(
-      "\u200B",
-      "View on [" +
-        chain.explorerName +
-        "](" +
-        chain.explorerURL +
-        depositData.transactionHash +
-        ")"
+    let depositAmount = parseFloat(
+      ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
     );
-  return { depositEmbed: depositEmbed, tweet: tweet };
+    let hopSampleReceived = await HopReceived(
+      pool.HOPID,
+      depositData.amount.toString(),
+      depositData.chainId,
+      1
+    );
+    let hopFeeString = "";
+    if (hopSampleReceived !== null) {
+      hopSampleReceived = ethers.utils.formatUnits(
+        hopSampleReceived,
+        pool.DECIMALS
+      );
+      let hopFeePercent =
+        ((depositAmount - hopSampleReceived) / hopSampleReceived) * 100;
+      hopFeeString = "\nHop Fee Estimate `" + decimals(hopFeePercent) + "%`";
+    }
+
+    let synapseSampleReceived = await SynapseReceived(
+      pool.HOPID,
+      ethers.utils.formatUnits(depositData.amount, pool.DECIMALS),
+      depositData.chainId,
+      1,
+      pool.DECIMALS
+    );
+    let synapseFeeString = "";
+    if (synapseSampleReceived !== null) {
+      synapseSampleReceived = ethers.utils.formatUnits(
+        synapseSampleReceived,
+        pool.DECIMALS
+      );
+      let synapseFeePercent =
+        ((depositAmount - synapseSampleReceived) / synapseSampleReceived) * 100;
+      synapseFeeString =
+        "\nSynapse Fee Estimate `" + decimals(synapseFeePercent) + "%`";
+    }
+
+    const depositEmbed = new MessageEmbed()
+      .setColor("#6CF9D8")
+      .setTitle(
+        ":bank:  DEPOSITED `" +
+          decimals(
+            parseFloat(
+              ethers.utils.formatUnits(depositData.amount, pool.DECIMALS)
+            )
+          ) +
+          "` **" +
+          symbol +
+          "**"
+      )
+      .setDescription(
+        ":alarm_clock: <t:" +
+          depositData.quoteTimestamp +
+          ":R>" +
+          "\nDeposit `#" +
+          depositData.depositId +
+          "`" +
+          hopFeeString +
+          synapseFeeString
+      )
+      .setThumbnail(chain.chainLogo)
+      .addField(
+        "\u200B",
+        "View on [" +
+          chain.explorerName +
+          "](" +
+          chain.explorerURL +
+          depositData.transactionHash +
+          ")"
+      );
+    return { depositEmbed: depositEmbed, tweet: tweet };
+  } else {
+    console.log(
+      "deposit not meeting threshold for alert, amt ",
+      amount * geckoPrice
+    );
+    return null;
+  }
 }
 
 async function processDeposit(depositEvent) {
@@ -301,10 +344,11 @@ async function processDeposit(depositEvent) {
 }
 
 async function sendTweet(tweet) {
-  if(twitterOn) {
-  T.post("statuses/update", tweet, function (err, data, response) {
-    console.log(data.text);
-  });}
+  if (twitterOn) {
+    T.post("statuses/update", tweet, function (err, data, response) {
+      console.log(data.text);
+    });
+  }
 }
 
 async function botGo() {
@@ -315,9 +359,11 @@ async function botGo() {
   PROVIDER.OPTIMISM.on(DEPOSITFILTERS.OPTIMISM, (depositEvent) => {
     try {
       processDeposit(depositEvent).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.depositEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.depositEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -326,9 +372,11 @@ async function botGo() {
   PROVIDER.ARBITRUM.on(DEPOSITFILTERS.ARBITRUM, (depositEvent) => {
     try {
       processDeposit(depositEvent).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.depositEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.depositEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -337,9 +385,11 @@ async function botGo() {
   PROVIDER.BOBA.on(DEPOSITFILTERS.BOBA, (depositEvent) => {
     try {
       processDeposit(depositEvent).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.depositEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.depositEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -347,12 +397,13 @@ async function botGo() {
   });
 
   PROVIDER.ETHEREUM.on(RELAYFILTERS.WETH, (relayEvent) => {
-    console.log(relayEvent);
     try {
       processRelay(relayEvent, BRIDGEPOOL.WETH).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -360,11 +411,12 @@ async function botGo() {
   });
   PROVIDER.ETHEREUM.on(RELAYFILTERS.USDC, (relayEvent) => {
     try {
-      console.log(relayEvent);
       processRelay(relayEvent, BRIDGEPOOL.USDC).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -372,11 +424,12 @@ async function botGo() {
   });
   PROVIDER.ETHEREUM.on(RELAYFILTERS.BADGER, (relayEvent) => {
     try {
-      console.log(relayEvent);
       processRelay(relayEvent, BRIDGEPOOL.BADGER).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -384,11 +437,12 @@ async function botGo() {
   });
   PROVIDER.ETHEREUM.on(RELAYFILTERS.UMA, (relayEvent) => {
     try {
-      console.log(relayEvent);
       processRelay(relayEvent, BRIDGEPOOL.UMA).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -396,11 +450,12 @@ async function botGo() {
   });
   PROVIDER.ETHEREUM.on(RELAYFILTERS.WBTC, (relayEvent) => {
     try {
-      console.log(relayEvent);
       processRelay(relayEvent, BRIDGEPOOL.WBTC).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
@@ -411,9 +466,11 @@ async function botGo() {
     try {
       console.log(relayEvent);
       processRelay(relayEvent, BRIDGEPOOL.DAI).then((result) => {
-        const testingChannel = client.channels.cache.get(botTestChannelId);
-        testingChannel.send({ embeds: [result.relayEmbed] });
-        sendTweet(result.tweet);
+        if (result) {
+          const testingChannel = client.channels.cache.get(botTestChannelId);
+          testingChannel.send({ embeds: [result.relayEmbed] });
+          sendTweet(result.tweet);
+        }
       });
     } catch (error) {
       console.log(error);
